@@ -863,7 +863,6 @@ def make_model_structure_report(df_model):
 
     return report
 
-
 # =========================
 # FUNGSI PENJELASAN MODEL GAGAL
 # =========================
@@ -914,6 +913,242 @@ def make_model_failure_explanation(nama_model, error_text, df_model):
         """
 
     return explanation
+
+# =========================
+# FUNGSI PERSAMAAN PREDIKTIF PER KABUPATEN
+# =========================
+
+def make_predictive_equation_table(
+    result,
+    nama_model,
+    dependent_variable="Kemiskinan"
+):
+    params = result.params.copy()
+
+    if "const" in params.index:
+        const_value = float(params["const"])
+    else:
+        const_value = 0.0
+
+    coef_params = params.drop(
+        labels=["const"],
+        errors="ignore"
+    )
+
+    daftar_terms = []
+
+    for variable, coefficient in coef_params.items():
+        if coefficient >= 0:
+            tanda = "+"
+        else:
+            tanda = "-"
+
+        coefficient_text = format_coefficient_for_equation(
+            coefficient
+        )
+
+        daftar_terms.append(
+            f"{tanda} {coefficient_text} × {variable}"
+        )
+
+    # =========================
+    # CEM: SATU PERSAMAAN UMUM
+    # =========================
+
+    if nama_model == "CEM / Pooled OLS":
+        persamaan = f"Ŷ_t = {const_value:,.4f}"
+
+        for term in daftar_terms:
+            persamaan = persamaan + f"\n    {term}"
+
+        df_equation = pd.DataFrame(
+            [
+                {
+                    "Kabupaten": "Semua Kabupaten",
+                    "Tipe Persamaan": "Persamaan umum",
+                    "Intercept Umum": const_value,
+                    "Efek Kabupaten": 0.0,
+                    "Intercept Prediktif": const_value,
+                    "Persamaan Prediktif": persamaan
+                }
+            ]
+        )
+
+        return df_equation
+
+    # =========================
+    # FEM / REM: AMBIL ENTITY EFFECT
+    # =========================
+
+    try:
+        index_fitted = result.fitted_values.index
+
+        daftar_kabupaten = sorted(
+            index_fitted.get_level_values(0).unique()
+        )
+
+    except Exception:
+        daftar_kabupaten = [
+            "Semua Kabupaten"
+        ]
+
+    df_entity = pd.DataFrame(
+        {
+            "Kabupaten": daftar_kabupaten
+        }
+    )
+
+    df_entity["Efek Kabupaten"] = 0.0
+
+    try:
+        estimated_effects = result.estimated_effects.copy()
+
+        if isinstance(estimated_effects, pd.Series):
+            estimated_effects = estimated_effects.to_frame(
+                "estimated_effects"
+            )
+
+        effect_column = estimated_effects.columns[0]
+
+        df_effect = (
+            estimated_effects
+            .groupby(level=0)[effect_column]
+            .mean()
+            .reset_index()
+        )
+
+        df_effect.columns = [
+            "Kabupaten",
+            "Efek Kabupaten"
+        ]
+
+        df_entity = df_entity.drop(
+            columns=[
+                "Efek Kabupaten"
+            ]
+        )
+
+        df_entity = df_entity.merge(
+            df_effect,
+            on="Kabupaten",
+            how="left"
+        )
+
+        df_entity["Efek Kabupaten"] = df_entity["Efek Kabupaten"].fillna(0.0)
+
+    except Exception:
+        df_entity["Efek Kabupaten"] = 0.0
+
+    df_entity["Intercept Umum"] = const_value
+
+    df_entity["Intercept Prediktif"] = (
+        df_entity["Intercept Umum"] +
+        df_entity["Efek Kabupaten"]
+    )
+
+    daftar_persamaan = []
+
+    for index, row in df_entity.iterrows():
+        kabupaten = row["Kabupaten"]
+        intercept_prediktif = row["Intercept Prediktif"]
+
+        persamaan = f"Ŷ_{kabupaten},t = {intercept_prediktif:,.4f}"
+
+        for term in daftar_terms:
+            persamaan = persamaan + f"\n    {term}"
+
+        daftar_persamaan.append(
+            persamaan
+        )
+
+    df_entity["Persamaan Prediktif"] = daftar_persamaan
+
+    if nama_model == "FEM / Fixed Effect":
+        df_entity["Tipe Persamaan"] = "Persamaan spesifik kabupaten berbasis fixed effect"
+
+    elif nama_model == "REM / Random Effect":
+        df_entity["Tipe Persamaan"] = "Persamaan spesifik kabupaten berbasis random effect"
+
+    else:
+        df_entity["Tipe Persamaan"] = "Persamaan model"
+
+    df_entity = df_entity[
+        [
+            "Kabupaten",
+            "Tipe Persamaan",
+            "Intercept Umum",
+            "Efek Kabupaten",
+            "Intercept Prediktif",
+            "Persamaan Prediktif"
+        ]
+    ].copy()
+
+    return df_entity
+
+# =========================
+# FUNGSI TAMPILKAN PERSAMAAN PREDIKTIF
+# =========================
+
+def show_predictive_equations(
+    result,
+    nama_model,
+    key_prefix
+):
+    df_persamaan_prediktif = make_predictive_equation_table(
+        result,
+        nama_model
+    )
+
+    if nama_model == "CEM / Pooled OLS":
+        st.info(
+            "CEM menggunakan satu intercept umum, sehingga persamaan prediktif tidak berbeda antar-kabupaten."
+        )
+
+        st.code(
+            df_persamaan_prediktif.iloc[0]["Persamaan Prediktif"],
+            language=None
+        )
+
+    else:
+        daftar_kabupaten_persamaan = df_persamaan_prediktif[
+            "Kabupaten"
+        ].tolist()
+
+        kabupaten_persamaan = st.selectbox(
+            "Pilih kabupaten untuk melihat persamaan prediktif",
+            daftar_kabupaten_persamaan,
+            key=f"{key_prefix}_persamaan_prediktif_kabupaten"
+        )
+
+        persamaan_terpilih = df_persamaan_prediktif[
+            df_persamaan_prediktif["Kabupaten"] == kabupaten_persamaan
+        ].iloc[0]["Persamaan Prediktif"]
+
+        st.code(
+            persamaan_terpilih,
+            language=None
+        )
+
+        with st.expander("Lihat Intercept Prediktif Semua Kabupaten"):
+            st.dataframe(
+                df_persamaan_prediktif[
+                    [
+                        "Kabupaten",
+                        "Tipe Persamaan",
+                        "Intercept Umum",
+                        "Efek Kabupaten",
+                        "Intercept Prediktif"
+                    ]
+                ].style.format(
+                    {
+                        "Intercept Umum": "{:,.4f}",
+                        "Efek Kabupaten": "{:,.4f}",
+                        "Intercept Prediktif": "{:,.4f}"
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True
+            )
 
 # =========================
 # FUNGSI FORMAT KOEFISIEN UNTUK PERSAMAAN
@@ -4180,6 +4415,14 @@ def halaman_estimasi_panel():
                 """
             )
 
+            st.markdown("**Persamaan prediktif per kabupaten:**")
+
+            show_predictive_equations(
+                result=result_terpilih,
+                nama_model=pilihan_model,
+                key_prefix="estimasi_panel"
+            )
+
             st.markdown("**Output teknis model:**")
 
             st.code(
@@ -5631,6 +5874,14 @@ def halaman_model_final():
             - `uᵢ` menunjukkan komponen random effect pada REM.
             - `εᵢₜ` menunjukkan error model.
             """
+        )
+        
+        st.markdown("**Persamaan prediktif per kabupaten:**")
+
+        show_predictive_equations(
+            result=result_final,
+            nama_model=model_ditampilkan,
+            key_prefix="model_final"
         )
 
         st.markdown("**Output teknis model:**")
