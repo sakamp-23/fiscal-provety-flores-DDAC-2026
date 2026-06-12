@@ -395,13 +395,21 @@ def get_map_color_scale(indikator):
 # HELPER METRIC CARD
 # =========================
 
-def show_metric_card(label, value, delta=None, help_text=None, height=105):
+def show_metric_card(
+    label,
+    value,
+    delta=None,
+    help_text=None,
+    delta_color="normal",
+    height=105
+):
     with st.container(border=True):
         if help_text is None:
             st.metric(
                 label=label,
                 value=value,
                 delta=delta,
+                delta_color=delta_color,
                 height=height
             )
 
@@ -411,6 +419,7 @@ def show_metric_card(label, value, delta=None, help_text=None, height=105):
                 value=value,
                 delta=delta,
                 help=help_text,
+                delta_color=delta_color,
                 height=height
             )
 
@@ -428,21 +437,18 @@ def show_metric_row(metric_list):
             label = metric["label"]
             value = metric["value"]
 
-            if "delta" in metric:
-                delta = metric["delta"]
-            else:
-                delta = None
-
-            if "help" in metric:
-                help_text = metric["help"]
-            else:
-                help_text = None
+            delta = metric.get("delta", None)
+            help_text = metric.get("help", None)
+            delta_color = metric.get("delta_color", "normal")
+            height = metric.get("height", 105)
 
             show_metric_card(
-                label,
-                value,
-                delta,
-                help_text
+                label=label,
+                value=value,
+                delta=delta,
+                help_text=help_text,
+                delta_color=delta_color,
+                height=height
             )
 
 # =========================
@@ -3265,6 +3271,12 @@ def halaman_flores_intelligence():
     )
 
     rata_tpt_akhir = df_tahun_akhir["TPT"].mean()
+    rata_tpt_awal = df_tahun_awal["TPT"].mean()
+
+    perubahan_rata_tpt = (
+        rata_tpt_akhir - rata_tpt_awal
+    )
+     
     total_tkd_akhir = df_tahun_akhir["Total_TKD"].sum()
     total_kur_akhir = df_tahun_akhir["KUR"].sum()
 
@@ -3279,11 +3291,14 @@ def halaman_flores_intelligence():
             {
                 "label": f"Rata-rata Kemiskinan {tahun_akhir}",
                 "value": f"{rata_kemiskinan_akhir:,.2f}",
-                "delta": f"{perubahan_rata_kemiskinan:,.2f}"
+                "delta": f"{perubahan_rata_kemiskinan:,.2f}",
+                "delta_color": "inverse"
             },
             {
                 "label": f"Rata-rata TPT {tahun_akhir}",
-                "value": f"{rata_tpt_akhir:,.2f}"
+                "value": f"{rata_tpt_akhir:,.2f}",
+                "delta": f"{perubahan_rata_tpt:,.2f}",
+                "delta_color": "inverse"
             },
             {
                 "label": f"Total TKD {tahun_akhir}",
@@ -3841,6 +3856,8 @@ def halaman_kabupaten_intelligence():
     perubahan_kemiskinan = kemiskinan_akhir - kemiskinan_awal
 
     tpt_akhir = df_akhir.iloc[0]["TPT"]
+    tpt_awal = df_awal.iloc[0]["TPT"]
+    perubahan_tpt = tpt_akhir - tpt_awal
     tkd_akhir = df_akhir.iloc[0]["Total_TKD"]
     kur_akhir = df_akhir.iloc[0]["KUR"]
 
@@ -3864,6 +3881,7 @@ def halaman_kabupaten_intelligence():
                 f"Kemiskinan {tahun_akhir}",
                 f"{kemiskinan_akhir:,.2f}",
                 delta=f"{perubahan_kemiskinan:,.2f}",
+                delta_color="inverse",
                 height=105
             )
 
@@ -3872,6 +3890,8 @@ def halaman_kabupaten_intelligence():
             st.metric(
                 f"TPT {tahun_akhir}",
                 f"{tpt_akhir:,.2f}",
+                delta = f"{perubahan_tpt:,.2f}",
+                delta_color="inverse",
                 height=105
             )
 
