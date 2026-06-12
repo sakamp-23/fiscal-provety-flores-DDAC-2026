@@ -2474,7 +2474,7 @@ def make_policy_brief(df_swot, df_rekomendasi, summary_swot, model_dibaca, alasa
 
 def halaman_overview():
 
-    st.title("Fiscal-Poverty Intelligence Dashboard Pulau Flores")
+    st.title("Panel Data Evidence and SWOT Strategy from the Flores Island Group")
 
     st.markdown(
         """
