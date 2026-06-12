@@ -2333,7 +2333,6 @@ def make_swot_strategy_table(df_swot):
 
     return df_strategy
 
-
 # =========================
 # HELPER SWOT: REKOMENDASI
 # =========================
@@ -2422,177 +2421,6 @@ def make_policy_recommendation_from_swot(df_swot, summary):
     df_rekomendasi = pd.DataFrame(daftar_rekomendasi)
 
     return df_rekomendasi
-
-# =========================
-# HELPER TOWS: SKOR PRIORITAS RINGKAS
-# =========================
-
-def make_tows_priority_data(df_rekomendasi):
-    df_tows = df_rekomendasi.copy().reset_index(drop=True)
-
-    effort_map = {
-        "Pengurangan Kemiskinan": 4.0,
-        "Indikator Kontekstual": 4.5,
-        "Sinyal Model Panel": 5.0,
-        "Pembiayaan Usaha": 4.5,
-        "Monitoring dan Evaluasi": 3.0
-    }
-
-    impact_map = {
-        "Pengurangan Kemiskinan": 9.0,
-        "Indikator Kontekstual": 8.5,
-        "Sinyal Model Panel": 7.5,
-        "Pembiayaan Usaha": 7.5,
-        "Monitoring dan Evaluasi": 6.0
-    }
-
-    priority_adjustment = {
-        "Tinggi": 0.7,
-        "Menengah-Tinggi": 0.4,
-        "Menengah": 0.0,
-        "Pendukung": -0.5
-    }
-
-    df_tows["Kode"] = [f"R{i + 1}" for i in range(df_tows.shape[0])]
-    df_tows["Effort"] = df_tows["Bidang"].map(effort_map).fillna(5.0)
-    df_tows["Impact"] = df_tows["Bidang"].map(impact_map).fillna(5.0)
-    df_tows["Impact"] = df_tows["Impact"] + df_tows["Prioritas"].map(priority_adjustment).fillna(0.0)
-    df_tows["Impact"] = df_tows["Impact"].clip(lower=0, upper=10)
-
-    return df_tows
-
-
-# =========================
-# HELPER TOWS: KLASIFIKASI KUADRAN
-# =========================
-
-def classify_tows_quadrant(effort, impact, batas_effort=5, batas_impact=5):
-    if effort <= batas_effort and impact >= batas_impact:
-        return "Kuadran I - Quick Wins"
-
-    elif effort > batas_effort and impact >= batas_impact:
-        return "Kuadran II - Strategis Jangka Panjang"
-
-    elif effort > batas_effort and impact < batas_impact:
-        return "Kuadran III - Isu Sektoral"
-
-    else:
-        return "Kuadran IV - Low Priority"
-
-
-# =========================
-# HELPER TOWS: GRAFIK PRIORITAS
-# =========================
-
-def make_tows_priority_chart(df_tows, batas_effort=5, batas_impact=5):
-    df_chart = df_tows.copy()
-
-    df_chart["Kuadran"] = df_chart.apply(
-        lambda row: classify_tows_quadrant(
-            row["Effort"],
-            row["Impact"],
-            batas_effort=batas_effort,
-            batas_impact=batas_impact
-        ),
-        axis=1
-    )
-
-    fig = px.scatter(
-        df_chart,
-        x="Effort",
-        y="Impact",
-        color="Kuadran",
-        text="Kode",
-        hover_data=[
-            "Prioritas",
-            "Bidang",
-            "Rekomendasi",
-            "Tindak Lanjut"
-        ],
-        title="Matriks Prioritas Rekomendasi Kebijakan"
-    )
-
-    fig.update_traces(
-        marker={
-            "size": 18,
-            "line": {
-                "width": 1,
-                "color": "black"
-            }
-        },
-        textposition="top center"
-    )
-
-    fig.add_vline(
-        x=batas_effort,
-        line_dash="dash",
-        line_color="black"
-    )
-
-    fig.add_hline(
-        y=batas_impact,
-        line_dash="dash",
-        line_color="black"
-    )
-
-    fig.add_annotation(
-        x=2.5,
-        y=9.5,
-        text="<b>KUADRAN I</b><br>Quick Wins",
-        showarrow=False
-    )
-
-    fig.add_annotation(
-        x=7.5,
-        y=9.5,
-        text="<b>KUADRAN II</b><br>Strategis Jangka Panjang",
-        showarrow=False
-    )
-
-    fig.add_annotation(
-        x=7.5,
-        y=1.0,
-        text="<b>KUADRAN III</b><br>Isu Sektoral",
-        showarrow=False
-    )
-
-    fig.add_annotation(
-        x=2.5,
-        y=1.0,
-        text="<b>KUADRAN IV</b><br>Low Priority",
-        showarrow=False
-    )
-
-    fig.update_layout(
-        xaxis_title="Effort / Biaya Eksekusi",
-        yaxis_title="Dampak terhadap Kesejahteraan / PDRB",
-        xaxis={
-            "range": [0, 10],
-            "dtick": 1
-        },
-        yaxis={
-            "range": [0, 10],
-            "dtick": 1
-        },
-        template="plotly_white",
-        height=560,
-        margin={
-            "l": 20,
-            "r": 20,
-            "t": 80,
-            "b": 20
-        },
-        legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": -0.25,
-            "xanchor": "center",
-            "x": 0.5
-        }
-    )
-
-    return fig, df_chart
-
 
 # =========================
 # HELPER POLICY BRIEF
@@ -6197,50 +6025,55 @@ def halaman_model_final():
         )
 
 # =========================
-# HALAMAN SWOT DAN REKOMENDASI - VERSI DECISION DASHBOARD
+# HALAMAN SWOT DAN REKOMENDASI
 # =========================
 
 def halaman_swot_rekomendasi():
+
+    # =========================
+    # HEADER
+    # =========================
 
     st.title("SWOT & Rekomendasi Kebijakan")
 
     st.markdown(
         """
-        Halaman ini merangkum isu strategis dan rekomendasi kebijakan per kabupaten.
-        Tampilan dibuat ringkas agar mudah digunakan oleh analis maupun pengambil keputusan.
+        Halaman ini menyajikan ringkasan SWOT dan rekomendasi kebijakan berbasis data
+        untuk kabupaten terpilih. Fokus halaman ini adalah membantu analis dan
+        pengambil kebijakan membaca isu utama, kekuatan wilayah, risiko, serta
+        tindak lanjut kebijakan secara ringkas.
         """
+    )
+
+    st.caption(
+        "SWOT dibentuk dari data panel utama, PDRB sektoral, indikator kontekstual, dan sinyal model panel."
     )
 
     st.divider()
 
     # =========================
-    # PILIH KABUPATEN
+    # PENGATURAN ANALISIS
     # =========================
+
+    st.header("Pengaturan Analisis")
 
     daftar_kabupaten = sorted(
         df_panel["Kabupaten"].dropna().unique()
     )
 
-    col1, col2 = st.columns([1, 2])
-
-    with col1:
-        kabupaten_terpilih = st.selectbox(
-            "Pilih Kabupaten",
-            daftar_kabupaten,
-            key="swot_kabupaten"
-        )
-
-    with col2:
-        st.info(
-            "Dashboard ini menampilkan policy brief, prioritas rekomendasi, dan SWOT ringkas. Detail data tetap tersedia di bagian akhir."
-        )
-
-    with st.expander("Pengaturan model panel"):
-        col1, col2, col3 = st.columns(3)
+    with st.container(border=True):
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
+            kabupaten_terpilih = st.selectbox(
+                "Pilih Kabupaten",
+                daftar_kabupaten,
+                key="swot_kabupaten"
+            )
+
+        with col2:
             pilihan_dataset = st.selectbox(
-                "Dataset model",
+                "Pilih Dataset Model",
                 [
                     "Model Normal",
                     "Model Lag 1"
@@ -6248,9 +6081,9 @@ def halaman_swot_rekomendasi():
                 key="swot_dataset"
             )
 
-        with col2:
+        with col3:
             pilihan_covariance = st.selectbox(
-                "Standard error",
+                "Pilih Standard Error",
                 [
                     "Robust",
                     "Unadjusted"
@@ -6258,9 +6091,9 @@ def halaman_swot_rekomendasi():
                 key="swot_covariance"
             )
 
-        with col3:
+        with col4:
             alpha = st.selectbox(
-                "Alpha",
+                "Pilih Alpha",
                 [
                     0.01,
                     0.05,
@@ -6280,6 +6113,10 @@ def halaman_swot_rekomendasi():
     else:
         cov_type = "unadjusted"
 
+    # =========================
+    # DATA KABUPATEN
+    # =========================
+
     (
         df_panel_kabupaten,
         df_context_kabupaten,
@@ -6295,7 +6132,7 @@ def halaman_swot_rekomendasi():
 
     df_coef_model = None
     model_dibaca = "-"
-    alasan_model = "Sinyal model panel belum tersedia."
+    alasan_model = "Model panel belum dapat dibaca."
 
     try:
         hasil_model = fit_all_panel_models(
@@ -6341,10 +6178,12 @@ def halaman_swot_rekomendasi():
     except Exception:
         df_coef_model = None
         model_dibaca = "-"
-        alasan_model = "Sinyal model panel tidak tersedia karena estimasi atau pemilihan model gagal."
+        alasan_model = (
+            "Sinyal model panel tidak tersedia karena estimasi atau pemilihan model gagal."
+        )
 
     # =========================
-    # BENTUK SWOT DAN REKOMENDASI
+    # MEMBENTUK SWOT DAN REKOMENDASI
     # =========================
 
     df_swot, summary_swot = make_consolidated_swot_analysis(
@@ -6361,228 +6200,263 @@ def halaman_swot_rekomendasi():
         summary_swot
     )
 
-    df_tows_awal = make_tows_priority_data(
-        df_rekomendasi
-    )
-
-    fig_tows, df_tows_final = make_tows_priority_chart(
-        df_tows_awal,
-        batas_effort=5,
-        batas_impact=5
-    )
-
-    brief = make_policy_brief(
-        df_swot,
-        df_rekomendasi,
-        summary_swot,
-        model_dibaca,
-        alasan_model
-    )
-
     st.divider()
 
     # =========================
-    # POLICY BRIEF
+    # RINGKASAN SWOT
     # =========================
 
-    st.header(f"Policy Brief {kabupaten_terpilih}")
+    st.header(f"Ringkasan SWOT {kabupaten_terpilih}")
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         show_metric_card(
-            "Prioritas",
-            brief["Prioritas Kebijakan"]
+            "Strength",
+            summary_swot["Jumlah Strength"]
         )
 
     with col2:
         show_metric_card(
-            "Strength",
-            brief["Strength"]
+            "Weakness",
+            summary_swot["Jumlah Weakness"]
         )
 
     with col3:
         show_metric_card(
-            "Weakness",
-            brief["Weakness"]
+            "Opportunity",
+            summary_swot["Jumlah Opportunity"]
         )
 
     with col4:
         show_metric_card(
             "Threat",
-            brief["Threat"]
-        )
-
-    with st.container(border=True):
-        st.markdown(
-            f"""
-            **Isu utama:** {brief["Isu Utama"]}  
-            **Dasar:** {brief["Dasar Isu"]}
-
-            **Rekomendasi utama:** {brief["Rekomendasi Utama"]}  
-            **Tindak lanjut:** {brief["Tindak Lanjut Utama"]}
-            """
+            summary_swot["Jumlah Threat"]
         )
 
     st.caption(
-        f"Model panel yang dibaca: {brief['Model Dibaca']}. {brief['Alasan Model']}"
+        f"Periode utama analisis: {summary_swot['Tahun Awal']}–{summary_swot['Tahun Akhir']}."
     )
 
     st.divider()
 
     # =========================
-    # REKOMENDASI PRIORITAS
+    # FOKUS KEBIJAKAN UTAMA
     # =========================
 
-    st.header("Prioritas Rekomendasi")
+    st.header("Fokus Kebijakan Utama")
 
-    df_rekomendasi_ringkas = df_rekomendasi[
-        [
-            "Prioritas",
-            "Bidang",
-            "Rekomendasi",
-            "Tindak Lanjut"
-        ]
-    ].head(4).copy()
+    df_weakness = df_swot[
+        df_swot["Kategori"] == "Weakness"
+    ].copy()
 
-    st.dataframe(
-        df_rekomendasi_ringkas,
-        use_container_width=True,
-        hide_index=True
-    )
+    df_threat = df_swot[
+        df_swot["Kategori"] == "Threat"
+    ].copy()
 
-    st.divider()
+    df_strength = df_swot[
+        df_swot["Kategori"] == "Strength"
+    ].copy()
 
-    # =========================
-    # MATRIKS PRIORITAS
-    # =========================
+    df_opportunity = df_swot[
+        df_swot["Kategori"] == "Opportunity"
+    ].copy()
 
-    st.header("Matriks Prioritas Kebijakan")
+    if df_weakness.shape[0] > 0:
+        isu_utama = df_weakness.iloc[0]["Poin SWOT"]
+        dasar_isu = df_weakness.iloc[0]["Dasar Data"]
+    elif df_threat.shape[0] > 0:
+        isu_utama = df_threat.iloc[0]["Poin SWOT"]
+        dasar_isu = df_threat.iloc[0]["Dasar Data"]
+    else:
+        isu_utama = "Tidak terdapat isu kelemahan atau ancaman utama yang dominan."
+        dasar_isu = "SWOT tidak menunjukkan kelemahan atau ancaman dominan pada data yang tersedia."
 
-    col1, col2 = st.columns([1.35, 1])
+    if df_strength.shape[0] > 0:
+        modal_utama = df_strength.iloc[0]["Poin SWOT"]
+    else:
+        modal_utama = "Belum terdapat kekuatan utama yang teridentifikasi."
+
+    if df_opportunity.shape[0] > 0:
+        peluang_utama = df_opportunity.iloc[0]["Poin SWOT"]
+    else:
+        peluang_utama = "Belum terdapat peluang utama yang teridentifikasi."
+
+    if df_rekomendasi.shape[0] > 0:
+        rekomendasi_utama = df_rekomendasi.iloc[0]["Rekomendasi"]
+        tindak_lanjut_utama = df_rekomendasi.iloc[0]["Tindak Lanjut"]
+        prioritas_utama = df_rekomendasi.iloc[0]["Prioritas"]
+    else:
+        rekomendasi_utama = "Belum terdapat rekomendasi kebijakan."
+        tindak_lanjut_utama = "-"
+        prioritas_utama = "-"
+
+    col1, col2 = st.columns(2)
 
     with col1:
-        st.plotly_chart(
-            fig_tows,
-            use_container_width=True
-        )
+        with st.container(border=True):
+            st.subheader("Isu Utama")
+            st.markdown(isu_utama)
+            st.caption(dasar_isu)
 
     with col2:
-        st.subheader("Daftar Kuadran")
+        with st.container(border=True):
+            st.subheader("Rekomendasi Utama")
+            st.markdown(rekomendasi_utama)
+            st.caption(f"Prioritas: {prioritas_utama}")
 
-        df_tows_table = df_tows_final[
-            [
-                "Kode",
-                "Kuadran",
-                "Prioritas",
-                "Bidang",
-                "Rekomendasi"
-            ]
-        ].copy()
+    col1, col2 = st.columns(2)
 
-        st.dataframe(
-            df_tows_table,
-            use_container_width=True,
-            hide_index=True
-        )
+    with col1:
+        with st.container(border=True):
+            st.subheader("Modal Kebijakan")
+            st.markdown(modal_utama)
 
-        st.caption(
-            "Kuadran I adalah prioritas paling cepat dieksekusi karena dampaknya tinggi dan effort relatif rendah."
-        )
+    with col2:
+        with st.container(border=True):
+            st.subheader("Peluang Kebijakan")
+            st.markdown(peluang_utama)
+
+    with st.container(border=True):
+        st.subheader("Tindak Lanjut Utama")
+        st.markdown(tindak_lanjut_utama)
 
     st.divider()
 
     # =========================
-    # SWOT RINGKAS
+    # RINCIAN SWOT
     # =========================
 
-    st.header("SWOT Ringkas")
+    st.header("Rincian SWOT")
 
-    pilihan_kuadran = st.selectbox(
-        "Pilih kuadran SWOT",
+    pilihan_swot = st.selectbox(
+        "Pilih kategori SWOT",
         [
             "Strength",
             "Weakness",
             "Opportunity",
             "Threat"
         ],
-        key="swot_quadrant_selectbox"
+        key="swot_category_selectbox"
     )
 
-    df_swot_kuadran = df_swot[
-        df_swot["Kategori"] == pilihan_kuadran
+    df_swot_tampil = df_swot[
+        df_swot["Kategori"] == pilihan_swot
     ].copy()
 
-    df_swot_kuadran = df_swot_kuadran[
-        [
-            "Sumber Analisis",
-            "Aspek",
-            "Poin SWOT",
-            "Implikasi"
-        ]
-    ].head(6).copy()
+    kolom_swot_tampil = [
+        "Sumber Analisis",
+        "Aspek",
+        "Poin SWOT",
+        "Dasar Data",
+        "Implikasi"
+    ]
 
-    if df_swot_kuadran.shape[0] == 0:
+    if df_swot_tampil.shape[0] == 0:
         st.info(
-            f"Belum ada poin pada kuadran {pilihan_kuadran}."
+            f"Belum ada poin SWOT untuk kategori {pilihan_swot}."
         )
+
     else:
         st.dataframe(
-            df_swot_kuadran,
+            df_swot_tampil[kolom_swot_tampil],
             use_container_width=True,
             hide_index=True
         )
 
+    st.caption(
+        "Rincian SWOT digunakan untuk membaca dasar analisis sebelum menyusun rekomendasi kebijakan."
+    )
+
     st.divider()
 
     # =========================
-    # DETAIL UNTUK ANALIS
+    # REKOMENDASI KEBIJAKAN
     # =========================
 
-    with st.expander("Detail analisis untuk analis"):
-        st.subheader("SWOT Lengkap")
+    st.header("Rekomendasi Kebijakan")
+
+    kolom_rekomendasi = [
+        "Prioritas",
+        "Bidang",
+        "Rekomendasi",
+        "Dasar",
+        "Tindak Lanjut"
+    ]
+
+    if df_rekomendasi.shape[0] == 0:
+        st.info(
+            "Belum ada rekomendasi kebijakan yang terbentuk."
+        )
+
+    else:
+        st.dataframe(
+            df_rekomendasi[kolom_rekomendasi],
+            use_container_width=True,
+            hide_index=True
+        )
+
+    st.markdown(
+        """
+        Rekomendasi disusun dari gabungan kondisi faktual kabupaten, struktur ekonomi,
+        indikator kontekstual, dan sinyal model panel. Rekomendasi ini bersifat analitis
+        dan perlu divalidasi lebih lanjut dengan konteks program, kapasitas fiskal, dan
+        kebijakan daerah.
+        """
+    )
+
+    st.divider()
+
+    # =========================
+    # SINYAL MODEL PANEL
+    # =========================
+
+    with st.expander("Sinyal Model Panel yang Digunakan"):
+        st.markdown(
+            f"""
+            **Model dibaca:** {model_dibaca}  
+            **Dataset:** {pilihan_dataset}  
+            **Standard error:** {pilihan_covariance}  
+            **Alpha:** {alpha}  
+            **Alasan:** {alasan_model}
+            """
+        )
+
+        if df_coef_model is None:
+            st.warning(
+                "Sinyal model panel belum masuk ke SWOT. SWOT tetap dibentuk dari data panel utama, PDRB, dan indikator kontekstual."
+            )
+
+        else:
+            st.dataframe(
+                df_coef_model,
+                use_container_width=True
+            )
+
+    # =========================
+    # DATA PENDUKUNG
+    # =========================
+
+    with st.expander("Tabel Lengkap SWOT Konsolidasi"):
         st.dataframe(
             df_swot,
             use_container_width=True,
             hide_index=True
         )
 
-        st.subheader("Rekomendasi Lengkap")
-        st.dataframe(
-            df_rekomendasi,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        st.subheader("Skor Prioritas")
-        st.dataframe(
-            df_tows_final,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        if df_coef_model is not None:
-            st.subheader("Koefisien Model Panel")
-            st.dataframe(
-                df_coef_model,
-                use_container_width=True,
-                hide_index=True
-            )
-
-    with st.expander("Data pendukung kabupaten"):
-        st.subheader("Data Panel Kabupaten")
+    with st.expander("Data Panel Kabupaten"):
         st.dataframe(
             df_panel_kabupaten,
             use_container_width=True
         )
 
-        st.subheader("Indikator Kontekstual Kabupaten")
+    with st.expander("Indikator Kontekstual Kabupaten"):
         st.dataframe(
             df_context_kabupaten,
             use_container_width=True
         )
 
-        st.subheader("PDRB Dominan Kabupaten")
+    with st.expander("PDRB Dominan Kabupaten"):
         st.dataframe(
             df_pdrb_dominan_kabupaten,
             use_container_width=True
