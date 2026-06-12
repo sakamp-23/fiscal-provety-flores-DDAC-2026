@@ -1099,6 +1099,8 @@ def show_predictive_equations(
         nama_model
     )
 
+    kabupaten_persamaan = None
+
     if nama_model == "CEM / Pooled OLS":
         st.info(
             "CEM menggunakan satu intercept umum, sehingga persamaan prediktif tidak berbeda antar-kabupaten."
@@ -1150,6 +1152,276 @@ def show_predictive_equations(
                 hide_index=True
             )
 
+    return kabupaten_persamaan
+
+# =========================
+# FUNGSI AMBIL EFEK KABUPATEN DARI MODEL
+# =========================
+
+def get_entity_effect_value(result, kabupaten_terpilih):
+    efek_kabupaten = 0.0
+
+    try:
+        estimated_effects = result.estimated_effects.copy()
+
+        if isinstance(estimated_effects, pd.Series):
+            estimated_effects = estimated_effects.to_frame(
+                "estimated_effects"
+            )
+
+        effect_column = estimated_effects.columns[0]
+
+        df_effect = (
+            estimated_effects
+            .groupby(level=0)[effect_column]
+            .mean()
+            .reset_index()
+        )
+
+        df_effect.columns = [
+            "Kabupaten",
+            "Efek Kabupaten"
+        ]
+
+        df_effect_kabupaten = df_effect[
+            df_effect["Kabupaten"] == kabupaten_terpilih
+        ].copy()
+
+        if df_effect_kabupaten.shape[0] > 0:
+            efek_kabupaten = float(
+                df_effect_kabupaten.iloc[0]["Efek Kabupaten"]
+            )
+
+    except Exception:
+        efek_kabupaten = 0.0
+
+    return efek_kabupaten
+
+# =========================
+# FUNGSI HITUNG PREDIKSI BERDASARKAN PERSAMAAN
+# =========================
+
+def calculate_prediction_from_equation(
+    result,
+    nama_model,
+    kabupaten_terpilih,
+    input_values
+):
+    params = result.params.copy()
+
+    if "const" in params.index:
+        intercept_umum = float(params["const"])
+    else:
+        intercept_umum = 0.0
+
+    if nama_model in [
+        "FEM / Fixed Effect",
+        "REM / Random Effect"
+    ]:
+        efek_kabupaten = get_entity_effect_value(
+            result,
+            kabupaten_terpilih
+        )
+
+    else:
+        efek_kabupaten = 0.0
+
+    intercept_prediktif = intercept_umum + efek_kabupaten
+
+    prediksi = intercept_prediktif
+
+    rincian = []
+
+    rincian.append(
+        {
+            "Komponen": "Intercept prediktif",
+            "Nilai Input": 1,
+            "Koefisien": intercept_prediktif,
+            "Kontribusi": intercept_prediktif
+        }
+    )
+
+    for variable, input_value in input_values.items():
+        if variable in params.index:
+            koefisien = float(params[variable])
+            kontribusi = koefisien * input_value
+            prediksi = prediksi + kontribusi
+
+            rincian.append(
+                {
+                    "Komponen": variable,
+                    "Nilai Input": input_value,
+                    "Koefisien": koefisien,
+                    "Kontribusi": kontribusi
+                }
+            )
+
+    df_rincian = pd.DataFrame(rincian)
+
+    summary_prediction = {
+        "Kabupaten": kabupaten_terpilih,
+        "Model": nama_model,
+        "Intercept Umum": intercept_umum,
+        "Efek Kabupaten": efek_kabupaten,
+        "Intercept Prediktif": intercept_prediktif,
+        "Prediksi Kemiskinan": prediksi
+    }
+
+    return prediksi, df_rincian, summary_prediction
+
+# =========================
+# FUNGSI TAMPILKAN SIMULASI PREDIKSI
+# =========================
+
+def show_prediction_simulation(
+    result,
+    nama_model,
+    df_model,
+    key_prefix,
+    kabupaten_terpilih=None
+):
+    st.header("Simulasi Prediksi Kemiskinan Berdasarkan Persamaan")
+
+    st.markdown(
+        """
+        Simulasi ini menghitung prediksi kemiskinan berdasarkan persamaan hasil estimasi.
+        Nilai input awal diambil dari data terakhir kabupaten, kemudian dapat disesuaikan
+        untuk melihat perubahan hasil prediksi.
+        """
+    )
+
+    daftar_kabupaten = sorted(
+        df_model["Kabupaten"].dropna().unique()
+    )
+
+    if kabupaten_terpilih in daftar_kabupaten:
+        kabupaten_simulasi = kabupaten_terpilih
+
+        st.info(
+            f"Simulasi mengikuti kabupaten pada persamaan prediktif: **{kabupaten_simulasi}**."
+        )
+
+    else:
+        kabupaten_simulasi = st.selectbox(
+            "Pilih Kabupaten Simulasi",
+            daftar_kabupaten,
+            key=f"{key_prefix}_kabupaten_simulasi"
+        )
+
+    df_kabupaten_model = df_model[
+        df_model["Kabupaten"] == kabupaten_simulasi
+    ].copy()
+
+    df_kabupaten_model = df_kabupaten_model.sort_values(
+        "Tahun"
+    ).reset_index(drop=True)
+
+    tahun_referensi = int(
+        df_kabupaten_model["Tahun"].max()
+    )
+
+    df_referensi = df_kabupaten_model[
+        df_kabupaten_model["Tahun"] == tahun_referensi
+    ].copy()
+
+    if df_referensi.shape[0] == 0:
+        st.warning(
+            "Data referensi kabupaten tidak tersedia untuk simulasi."
+        )
+        return
+
+    row_referensi = df_referensi.iloc[0]
+
+    params = result.params.copy()
+
+    daftar_variabel_model = [
+        variable for variable in params.index
+        if variable != "const"
+    ]
+
+    input_values = {}
+
+    st.subheader("Input Variabel Simulasi")
+
+    st.caption(
+        "Ubah nilai variabel di bawah untuk melihat prediksi kemiskinan berdasarkan persamaan model."
+    )
+
+    jumlah_kolom = 2
+    columns = st.columns(jumlah_kolom)
+
+    for index, variable in enumerate(daftar_variabel_model):
+        nilai_default = 0.0
+
+        if variable in row_referensi.index:
+            nilai_default = row_referensi[variable]
+
+            if pd.isna(nilai_default):
+                nilai_default = 0.0
+
+        with columns[index % jumlah_kolom]:
+            input_values[variable] = st.number_input(
+                label=variable,
+                value=float(nilai_default),
+                step=1.0,
+                format="%.4f",
+                key=f"{key_prefix}_input_{variable}"
+            )
+
+    prediksi, df_rincian, summary_prediction = calculate_prediction_from_equation(
+        result=result,
+        nama_model=nama_model,
+        kabupaten_terpilih=kabupaten_simulasi,
+        input_values=input_values
+    )
+
+    st.divider()
+
+    st.subheader("Hasil Simulasi")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        show_metric_card(
+            "Kabupaten",
+            kabupaten_simulasi
+        )
+
+    with col2:
+        show_metric_card(
+            "Model",
+            nama_model
+        )
+
+    with col3:
+        show_metric_card(
+            "Intercept Prediktif",
+            f"{summary_prediction['Intercept Prediktif']:,.4f}"
+        )
+
+    with col4:
+        show_metric_card(
+            "Prediksi Kemiskinan",
+            f"{prediksi:,.4f}"
+        )
+
+    st.caption(
+        "Prediksi ini merupakan hasil perhitungan mekanis dari persamaan model, bukan target resmi kebijakan."
+    )
+
+    with st.expander("Lihat Rincian Kontribusi Variabel"):
+        st.dataframe(
+            df_rincian.style.format(
+                {
+                    "Nilai Input": "{:,.4f}",
+                    "Koefisien": "{:,.8f}",
+                    "Kontribusi": "{:,.4f}"
+                }
+            ),
+            use_container_width=True,
+            hide_index=True
+        )
+
 # =========================
 # FUNGSI FORMAT KOEFISIEN UNTUK PERSAMAAN
 # =========================
@@ -1167,7 +1439,6 @@ def format_coefficient_for_equation(value):
         teks = f"{nilai_abs:,.8f}"
 
     return teks
-
 
 # =========================
 # FUNGSI PERSAMAAN HASIL ESTIMASI
@@ -5878,7 +6149,7 @@ def halaman_model_final():
         
         st.markdown("**Persamaan prediktif per kabupaten:**")
 
-        show_predictive_equations(
+        kabupaten_persamaan = show_predictive_equations(
             result=result_final,
             nama_model=model_ditampilkan,
             key_prefix="model_final"
@@ -5889,6 +6160,20 @@ def halaman_model_final():
         st.code(
             str(result_final.summary),
             language=None
+        )
+
+        st.divider()
+
+        # =========================
+        # SIMULASI PREDIKSI BERDASARKAN PERSAMAAN
+        # =========================
+
+        show_prediction_simulation(
+            result=result_final,
+            nama_model=model_ditampilkan,
+            df_model=df_model,
+            key_prefix="model_final",
+            kabupaten_terpilih=kabupaten_persamaan
         )
 
 # =========================
